@@ -8,13 +8,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAvailableDrivers = void 0;
-const models_1 = require("../db/models");
+const driver_1 = __importDefault(require("../db/models/driver"));
 // Fetch all available drivers (drivers who are not deleted and are active)
 const getAvailableDrivers = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const availableDrivers = yield models_1.Driver.findAll({
+        const availableDrivers = yield driver_1.default.findAll({
             where: {
                 is_deleted: false,
                 active: true

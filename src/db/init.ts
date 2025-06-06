@@ -28,8 +28,6 @@ async function init() {
     await SenderDetails.sync({alter: isDev});
     await XlrUser.sync({alter:isDev})
     await vehicleBooking.sync({alter: true});
-
-
 }
 
 const dbInit = () => {

@@ -17,6 +17,7 @@ const users_1 = __importDefault(require("../db/models/users"));
 const multer_1 = __importDefault(require("multer"));
 const multer_s3_1 = __importDefault(require("multer-s3"));
 const client_s3_1 = require("@aws-sdk/client-s3");
+const redis_1 = __importDefault(require("../../src/redis/redis"));
 const UserRouter = express_1.default.Router();
 // Configure AWS S3
 const s3 = new client_s3_1.S3Client({
@@ -69,10 +70,10 @@ UserRouter.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* (
             email,
             phone,
             gender,
-            password
+            password, // Consider hashing for production
         };
         console.log("Creating User with object:", createUserObject);
-        // Create user using Sequelize model
+        // Create user using Sequelize model 
         const createUser = yield users_1.default.create(createUserObject);
         return res.status(200).send({ message: "User created successfully", data: createUser });
     }
@@ -82,49 +83,115 @@ UserRouter.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* (
     }
 }));
 // Get user by ID
-UserRouter.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+UserRouter.get('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const cacheKey = `user:${id}`; // Define a cache key for the specific user
+    console.log(`Received request for user with ID: ${id}`); // Log the received ID
     try {
-        const { id } = req.params;
-        const user = yield users_1.default.findOne({ where: { id, is_deleted: false } });
-        if (!user) {
-            return res.status(404).send({ message: "User not found." });
-        }
-        return res.status(200).send(user);
+        // Check if the user data is already in Redis
+        redis_1.default.get(cacheKey, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error while fetching:', err); // Log Redis error
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, parse and return it
+                console.log('Cache hit, returning data from Redis:', cachedData); // Log cached data
+                return res.status(200).json(JSON.parse(cachedData));
+            }
+            // Cache miss, fetch user from the database
+            console.log('Cache miss, fetching user from database...'); // Indicate cache miss
+            const user = yield users_1.default.findOne({ where: { id, is_deleted: false } });
+            if (!user) {
+                console.log(`User not found for ID: ${id}`); // Log if user is not found
+                return res.status(404).json({ message: 'User not found.' });
+            }
+            // Cache the user data in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(cacheKey, JSON.stringify(user));
+            const expireResult = yield redis_1.default.expire(cacheKey, 2);
+            console.log(`User data cached for ID: ${id}, Expiration result: ${expireResult}`); // Log cache expiration result
+            // Respond with the user data
+            console.log(`Responding with user data for ID: ${id}`); // Log response
+            res.status(200).json(user);
+        }));
     }
     catch (error) {
-        console.error("Error in fetching user by ID:", error);
-        return res.status(500).send({ message: `Error in fetching user: ${error.message}` });
+        console.error('Error in fetching user by ID:', error); // Log the entire error object
+        res.status(500).json({ message: `Error in fetching user: ${error.message}` });
     }
 }));
 // Get all users if is_deleted is false
 UserRouter.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const cacheKey = 'users'; // Define a cache key for all users
     try {
-        const users = yield users_1.default.findAll({ where: { is_deleted: false } });
-        return res.status(200).send(users);
+        // Check if the user data is already in Redis
+        redis_1.default.get(cacheKey, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, parse and return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).json(JSON.parse(cachedData));
+            }
+            // Fetch the user data from the database
+            const users = yield users_1.default.findAll({ where: { is_deleted: false } });
+            // Store the user data in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(cacheKey, JSON.stringify(users));
+            yield redis_1.default.expire(cacheKey, 2);
+            // Respond with the user data
+            res.status(200).json(users);
+        }));
     }
     catch (error) {
-        console.error("Error in fetching users:", error);
-        return res.status(500).send({ message: `Error in fetching users: ${error.message}` });
+        console.error('Error in fetching users:', error);
+        res.status(500).json({ message: `Error in fetching users: ${error.message}` });
     }
 }));
 // Update user
+// UserRouter.patch("/:id", async (req: Request, res: Response) => {
+//   try {
+//     const { id } = req.params;
+//     const { firstname, lastname, email, mobile_number, gender, password } = req.body;
+//     const user = await User.findOne({ where: { id, is_deleted: false } });
+//     if (!user) {
+//       return res.status(404).send({ message: "User not found." });
+//     }
+//     // Concatenate firstname and lastname to form username
+//     const username = `${firstname} ${lastname}`;
+//     // Update user object
+//     const updateUserObject: any = {
+//       username,
+//       email,
+//       mobile_number,
+//       gender,
+//       password
+//     };
+// Update user using Sequelize model
+//     await User.update(updateUserObject, { where: { id } });
+//     return res.status(200).send({ message: "User updated successfully" });
+//   } catch (error: any) {
+//     console.error("Error in updating user:", error);
+//     return res.status(500).send({ message: `Error in updating user: ${error.message}` });
+//   }
+// });
 UserRouter.patch("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const { firstname, lastname, email, mobile_number, gender, password } = req.body;
+        const { username, email, phone, gender } = req.body;
+        console.log("Update request body:", req.body); // Log the request body
+        // Fetch user by id and check if not deleted
         const user = yield users_1.default.findOne({ where: { id, is_deleted: false } });
         if (!user) {
             return res.status(404).send({ message: "User not found." });
         }
-        // Concatenate firstname and lastname to form username
-        const username = `${firstname} ${lastname}`;
         // Update user object
         const updateUserObject = {
             username,
             email,
-            mobile_number,
+            phone,
             gender,
-            password
         };
         // Update user using Sequelize model
         yield users_1.default.update(updateUserObject, { where: { id } });
@@ -184,28 +251,64 @@ UserRouter.patch("/:id/active", (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 UserRouter.get('/:id/counts', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const cacheKey = 'activeUsersCount'; // Define a cache key for active users count
     try {
-        const activeUsersCount = yield users_1.default.count({
-            where: {
-                active: true,
-                is_deleted: false
+        // Check if the active users count is already in Redis
+        redis_1.default.get(cacheKey, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
             }
-        });
-        res.json({ count: activeUsersCount });
+            if (cachedData) {
+                // If data is found in Redis, parse and return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).json({ count: JSON.parse(cachedData) });
+            }
+            // Fetch the active users count from the database
+            const activeUsersCount = yield users_1.default.count({
+                where: {
+                    active: true,
+                    is_deleted: false
+                }
+            });
+            // Store the active users count in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(cacheKey, JSON.stringify(activeUsersCount));
+            yield redis_1.default.expire(cacheKey, 2);
+            // Respond with the active users count
+            res.status(200).json({ count: activeUsersCount });
+        }));
     }
     catch (error) {
-        console.error('Error fetching active drivers:', error);
-        res.status(500).json({ message: 'Server Error' });
+        console.error('Error fetching active users count:', error);
+        res.status(500).json({ message: `Server Error: ${error.message}` });
     }
 }));
 UserRouter.get('/total/counts/all', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const cacheKey = 'totalUsersCount'; // Define a cache key for total users count
     try {
-        const totalUsersCount = yield users_1.default.count();
-        res.json({ count: totalUsersCount });
+        // Check if the total users count is already in Redis
+        redis_1.default.get(cacheKey, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, parse and return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).json({ count: JSON.parse(cachedData) });
+            }
+            // Fetch the total users count from the database
+            const totalUsersCount = yield users_1.default.count();
+            // Store the total users count in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(cacheKey, JSON.stringify(totalUsersCount));
+            yield redis_1.default.expire(cacheKey, 2);
+            // Respond with the total users count
+            res.status(200).json({ count: totalUsersCount });
+        }));
     }
     catch (error) {
         console.error('Error fetching total users count:', error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: `Server Error: ${error.message}` });
     }
 }));
 UserRouter.patch("/:user_id/profile-image", upload.single("profile_image"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -234,16 +337,34 @@ UserRouter.patch("/:user_id/profile-image", upload.single("profile_image"), (req
     }
 }));
 UserRouter.get("/:user_id/profile_image", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { user_id } = req.params;
+    const cacheKey = `userProfileImage:${user_id}`; // Define a cache key based on user ID
     try {
-        const { user_id } = req.params;
-        // Find the user by ID
-        const user = yield users_1.default.findByPk(user_id, {
-            attributes: ['profile_image'],
-        });
-        if (!user) {
-            return res.status(404).send({ message: "User not found." });
-        }
-        return res.status(200).send({ profile_image: user.profile_image });
+        // Check if the profile image is already in Redis
+        redis_1.default.get(cacheKey, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, parse and return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).json({ profile_image: JSON.parse(cachedData) });
+            }
+            // Fetch the profile image from the database
+            const user = yield users_1.default.findByPk(user_id, {
+                attributes: ['profile_image'],
+            });
+            if (!user) {
+                return res.status(404).send({ message: "User not found." });
+            }
+            const profileImage = user.profile_image;
+            // Store the profile image in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(cacheKey, JSON.stringify(profileImage));
+            yield redis_1.default.expire(cacheKey, 2);
+            // Respond with the profile image
+            res.status(200).json({ profile_image: profileImage });
+        }));
     }
     catch (error) {
         console.error("Error in retrieving profile image:", error);

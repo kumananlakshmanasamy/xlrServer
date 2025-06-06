@@ -8,32 +8,26 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendMessage = exports.disconnectProducer = exports.connectProducer = void 0;
+exports.sendMessage = exports.connectProducer = void 0;
 // kafkaProducer.ts
-const kafka_1 = __importDefault(require("./kafka"));
-const producer = kafka_1.default.producer();
+const kafkajs_1 = require("kafkajs");
+const kafka = new kafkajs_1.Kafka({
+    clientId: 'ride-booking-app',
+    brokers: ['localhost:9092'],
+    logLevel: kafkajs_1.logLevel.ERROR,
+});
+const producer = kafka.producer();
 const connectProducer = () => __awaiter(void 0, void 0, void 0, function* () {
     yield producer.connect();
+    console.log('Kafka Producer connected');
 });
 exports.connectProducer = connectProducer;
-const disconnectProducer = () => __awaiter(void 0, void 0, void 0, function* () {
-    yield producer.disconnect();
-});
-exports.disconnectProducer = disconnectProducer;
 const sendMessage = (topic, message) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield producer.send({
-            topic,
-            messages: [{ value: JSON.stringify(message) }],
-        });
-        console.log(`Message sent to Kafka topic '${topic}':`, message);
-    }
-    catch (error) {
-        console.error('Error sending message to Kafka:', error);
-    }
+    yield producer.send({
+        topic,
+        messages: [{ value: JSON.stringify(message) }],
+    });
 });
 exports.sendMessage = sendMessage;
+exports.default = producer;

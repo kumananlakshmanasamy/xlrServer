@@ -10,8 +10,6 @@ dotenv_1.default.config();
 const redis = new ioredis_1.default({
     host: '127.0.0.1',
     port: 6379,
-    //   password: process.env.REDIS_PASSWORD || undefined, // Use undefined if not set
-    //   db: Number(process.env.REDIS_DB) || 0,
 });
 redis.on('connect', () => {
     console.log('Connected to Redis');

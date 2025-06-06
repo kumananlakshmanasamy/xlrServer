@@ -27,7 +27,8 @@ Driver.init({
         allowNull: false
     },
     gender: {
-        type: sequelize_1.DataTypes.STRING(1)
+        type: sequelize_1.DataTypes.STRING(6), // Allow up to 6 characters for gender (e.g., "Male", "Female")
+        allowNull: true
     },
     dob: {
         type: sequelize_1.DataTypes.DATE
@@ -54,8 +55,33 @@ Driver.init({
         defaultValue: false
     },
     status: {
-        type: sequelize_1.DataTypes.STRING, // Change to string type
-    }
+        type: sequelize_1.DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    profile_image: {
+        type: sequelize_1.DataTypes.STRING, // New field for storing image URL
+        allowNull: true // Optional field     
+    },
+    title: {
+        type: sequelize_1.DataTypes.STRING(100),
+        allowNull: false,
+        defaultValue: 'new driver Registered' // Set default value for title
+    },
+    notification_status: {
+        type: sequelize_1.DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true // Define default value for notification_status
+    },
+    type: {
+        type: sequelize_1.DataTypes.STRING, // Specify the type as STRING
+        allowNull: false, // You can change this to false if it's a required field
+        defaultValue: 'driver'
+    },
+    document_status: {
+        type: sequelize_1.DataTypes.ENUM("pending", "under_verification", "approved"), // Enum field
+        allowNull: false,
+        defaultValue: "pending", // Default value
+    },
 }, {
     timestamps: true,
     sequelize: config_1.default,

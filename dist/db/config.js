@@ -21,6 +21,12 @@ function getConnection() {
         host: dbHost,
         port: parseInt(dbPort || '5432'),
         dialect: dbDriver,
+        dialectOptions: {
+            ssl: {
+                require: true,
+                rejectUnauthorized: false // For self-signed certificates
+            }
+        }
     });
 }
 const sequelizeConnection = getConnection();

@@ -13,164 +13,182 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const vehicle_1 = __importDefault(require("../db/models/vehicle"));
-const multer_1 = __importDefault(require("multer"));
-const multer_s3_1 = __importDefault(require("multer-s3"));
-const client_s3_1 = require("@aws-sdk/client-s3");
-const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config();
+const Vehicles_1 = __importDefault(require("../db/models/Vehicles")); // Ensure you import VehicleInput
+const image_1 = __importDefault(require("../db/models/image"));
+const redis_1 = __importDefault(require("../../src/redis/redis")); // Ensure the path is correct
 const VehicleRouter = express_1.default.Router();
-function isError(error) {
-    return error instanceof Error;
-}
-// Ensure all environment variables are defined
-if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.BUCKET_REGION || !process.env.BUCKET_NAME) {
-    throw new Error('Missing necessary AWS configuration in .env file');
-}
-// Configure AWS S3 using S3Client
-const s3 = new client_s3_1.S3Client({
-    region: process.env.BUCKET_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    },
-});
-// Configure multer to use S3
-const upload = (0, multer_1.default)({
-    storage: (0, multer_s3_1.default)({
-        s3: s3,
-        bucket: process.env.BUCKET_NAME,
-        metadata: (req, file, cb) => {
-            cb(null, { fieldName: file.fieldname });
-        },
-        key: (req, file, cb) => {
-            cb(null, `vehicles/${Date.now()}_${file.originalname}`);
-        },
-    }),
-});
-// Middleware to handle multer errors
-function multerErrorHandler(err, req, res, next) {
-    if (err instanceof multer_1.default.MulterError) {
-        return res.status(400).json({ success: false, error: `Multer Error: ${err.message}` });
-    }
-    next(err);
-}
-// Route to create a new vehicle with image upload
-VehicleRouter.post('/post/create', upload.single('image'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('Request Fields:', req.body);
-    console.log('Request File:', req.file);
+// Create a new Vehicle
+VehicleRouter.post('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const file = req.file;
-        const { name, capacity, price } = req.body;
-        if (!name || !capacity || !price || !file) {
-            return res.status(400).json({ success: false, error: 'All required fields are not provided' });
-        }
-        const newVehicle = yield vehicle_1.default.create({
-            name,
-            capacity,
-            price,
-            image: file.location,
+        const vehicle = yield Vehicles_1.default.create(req.body);
+        return res.status(201).json(vehicle);
+    }
+    catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+}));
+// Get all Vehicles
+VehicleRouter.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const cacheKey = 'vehicles'; // Define a cache key for vehicles
+    try {
+        // Check if the vehicles data is already in Redis
+        redis_1.default.get(cacheKey, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, parse and return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).json(JSON.parse(cachedData));
+            }
+            // Fetch the vehicles data from the database
+            const vehicles = yield Vehicles_1.default.findAll({
+                include: [{
+                        model: image_1.default,
+                        as: 'image',
+                        attributes: ['image_url'], // Ensure 'image_id' is included
+                    }],
+            });
+            if (!vehicles.length) {
+                return res.status(404).json({ error: 'No vehicles found' });
+            }
+            // Store the vehicles data in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(cacheKey, JSON.stringify(vehicles));
+            yield redis_1.default.expire(cacheKey, 2);
+            // Respond with the vehicles data
+            res.status(200).json(vehicles);
+        }));
+    }
+    catch (error) {
+        console.error('Error in fetching vehicles:', error);
+        return res.status(500).json({ error: error.message });
+    }
+}));
+// Get a Vehicle by ID
+VehicleRouter.get('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const cacheKey = `vehicle:${id}`; // Define a cache key based on the vehicle ID
+    try {
+        // Check if the vehicle data is already in Redis
+        redis_1.default.get(cacheKey, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, parse and return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).json(JSON.parse(cachedData));
+            }
+            // Fetch the vehicle data from the database
+            const vehicle = yield Vehicles_1.default.findByPk(id, {
+                include: [{
+                        model: image_1.default,
+                        as: 'image',
+                        attributes: ['image_id'], // Ensure 'image_id' is included
+                    }],
+            });
+            if (!vehicle) {
+                return res.status(404).json({ error: 'Vehicle not found' });
+            }
+            // Store the vehicle data in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(cacheKey, JSON.stringify(vehicle));
+            yield redis_1.default.expire(cacheKey, 2);
+            // Respond with the vehicle data
+            res.status(200).json(vehicle);
+        }));
+    }
+    catch (error) {
+        console.error('Error in fetching vehicle by ID:', error);
+        return res.status(500).json({ error: error.message });
+    }
+}));
+// Update a Vehicle by ID
+VehicleRouter.put('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const [updated] = yield Vehicles_1.default.update(req.body, {
+            where: { id: req.params.id },
         });
-        res.status(201).json({ success: true, data: newVehicle });
-    }
-    catch (err) {
-        console.error('Error in /create:', err);
-        res.status(500).json({ success: false, error: 'Server Error' });
-    }
-}));
-// // Create a new vehicle
-// VehicleRouter.post('/post', async (req: Request, res: Response) => {
-//   try {
-//     const { name, capacity, image, price } = req.body;
-//     const vehicle = await Vehicle.create({ name, capacity, image, price });
-//     res.status(201).json(vehicle);
-//   } catch (error) {
-//     if (isError(error)) {
-//       res.status(400).json({ error: error.message });
-//     } else {
-//       res.status(500).json({ error: 'An unknown error occurred' });
-//     }
-//   }
-// });
-// Get all vehicles
-VehicleRouter.get('/vehicles', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const vehicles = yield vehicle_1.default.findAll();
-        res.status(200).json(vehicles);
+        if (updated) {
+            // Invalidate the cache for this vehicle
+            redis_1.default.del(`vehicle:${req.params.id}`);
+            const updatedVehicle = yield Vehicles_1.default.findByPk(req.params.id);
+            return res.status(200).json(updatedVehicle);
+        }
+        return res.status(404).json({ error: 'Vehicle not found' });
     }
     catch (error) {
-        if (isError(error)) {
-            res.status(500).json({ error: error.message });
-        }
-        else {
-            res.status(500).json({ error: 'An unknown error occurred' });
-        }
+        return res.status(400).json({ error: error.message });
     }
 }));
-// Get a vehicle by ID
-VehicleRouter.get('/vehicles/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// Delete a Vehicle by ID
+VehicleRouter.delete('/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id } = req.params;
-        const vehicle = yield vehicle_1.default.findByPk(id);
-        if (vehicle) {
-            res.status(200).json(vehicle);
+        const deleted = yield Vehicles_1.default.destroy({
+            where: { id: req.params.id },
+        });
+        if (deleted) {
+            // Invalidate the cache for this vehicle
+            redis_1.default.del(`vehicle:${req.params.id}`);
+            return res.status(204).send(); // No content
         }
-        else {
-            res.status(404).json({ error: 'Vehicle not found' });
-        }
+        return res.status(404).json({ error: 'Vehicle not found' });
     }
     catch (error) {
-        if (isError(error)) {
-            res.status(500).json({ error: error.message });
-        }
-        else {
-            res.status(500).json({ error: 'An unknown error occurred' });
-        }
+        return res.status(500).json({ error: error.message });
     }
 }));
-// Update a vehicle by ID
-VehicleRouter.put('/vehicles/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+VehicleRouter.post('/calculate-prices', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id } = req.params;
-        const { name, capacity, image, price } = req.body;
-        const vehicle = yield vehicle_1.default.findByPk(id);
-        if (vehicle) {
-            yield vehicle.update({ name, capacity, image, price });
-            res.status(200).json(vehicle);
+        const { distance } = req.body;
+        // Validate distance input
+        if (!distance || typeof distance !== 'number' || distance <= 0) {
+            return res.status(400).json({ error: 'Invalid distance provided' });
         }
-        else {
-            res.status(404).json({ error: 'Vehicle not found' });
+        // Get all vehicles from the database, including image details
+        const vehicles = yield Vehicles_1.default.findAll({
+            include: [{
+                    model: image_1.default,
+                    as: 'image',
+                    attributes: ['image_url'], // Only include the image_url attribute
+                }],
+        });
+        if (!vehicles.length) {
+            return res.status(404).json({ error: 'No vehicles found' });
         }
+        // Calculate prices for each vehicle
+        const vehiclePrices = vehicles.map(vehicle => {
+            // Ensure baseFare and ratePerKm are numbers
+            const baseFare = Number(vehicle.baseFare);
+            const ratePerKm = Number(vehicle.ratePerKm);
+            const estimatedTimePerKm = Number(vehicle.estimatedTimePerKm);
+            const totalPrice = baseFare + ratePerKm * distance;
+            const estimatedTime = estimatedTimePerKm * distance;
+            // Convert estimated time into hours/minutes if necessary
+            const formattedTime = estimatedTime >= 60
+                ? `${Math.floor(estimatedTime / 60)} hour${Math.floor(estimatedTime / 60) > 1 ? 's' : ''}`
+                : `${Math.round(estimatedTime)} min`;
+            // Access the image_url from the image association
+            const imageUrl = vehicle.image ? vehicle.image.image_url : null;
+            return {
+                id: vehicle.id,
+                vehicleName: vehicle.name,
+                capacity: vehicle.capacity,
+                baseFare,
+                ratePerKm,
+                distance,
+                totalPrice: Math.round(totalPrice), // No decimal for price
+                estimatedTime: formattedTime, // Formatted time with hour/min logic
+                image: imageUrl, // Use the correct image URL
+            };
+        });
+        // Send the result as JSON response
+        res.json(vehiclePrices);
     }
     catch (error) {
-        if (isError(error)) {
-            res.status(400).json({ error: error.message });
-        }
-        else {
-            res.status(500).json({ error: 'An unknown error occurred' });
-        }
-    }
-}));
-// Delete a vehicle by ID
-VehicleRouter.delete('/vehicles/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id } = req.params;
-        const vehicle = yield vehicle_1.default.findByPk(id);
-        if (vehicle) {
-            yield vehicle.destroy();
-            res.status(204).end();
-        }
-        else {
-            res.status(404).json({ error: 'Vehicle not found' });
-        }
-    }
-    catch (error) {
-        if (isError(error)) {
-            res.status(500).json({ error: error.message });
-        }
-        else {
-            res.status(500).json({ error: 'An unknown error occurred' });
-        }
+        console.error('Error calculating prices:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 }));
 exports.default = VehicleRouter;

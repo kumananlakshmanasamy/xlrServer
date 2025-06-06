@@ -20,7 +20,7 @@ Transaction.init({
         type: sequelize_1.DataTypes.INTEGER,
         allowNull: true,
         references: {
-            model: users_1.default,
+            model: users_1.default, // Make sure the table name is correct
             key: 'id'
         }
     },

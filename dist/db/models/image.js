@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const sequelize_1 = require("sequelize");
-const config_1 = __importDefault(require("../config")); // Adjust the path as necessary
+const config_1 = __importDefault(require("../config"));
 // Define the Image class
 class Image extends sequelize_1.Model {
 }
@@ -14,17 +14,6 @@ Image.init({
         type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false,
-    },
-    entity_type: {
-        type: sequelize_1.DataTypes.STRING,
-        allowNull: false,
-        validate: {
-            isIn: [['Category', 'SubCategory', 'brand', 'product', 'restaurant', 'dish', 'inventory']],
-        },
-    },
-    entity_id: {
-        type: sequelize_1.DataTypes.INTEGER,
         allowNull: false,
     },
     image_url: {

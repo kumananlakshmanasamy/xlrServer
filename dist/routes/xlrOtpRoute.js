@@ -15,10 +15,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const axios_1 = __importDefault(require("axios"));
 const dotenv_1 = __importDefault(require("dotenv"));
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const users_1 = __importDefault(require("../db/models/users"));
+const xlrUser_1 = __importDefault(require("../db/models/xlrUser"));
 dotenv_1.default.config();
-const OTPRouter = express_1.default.Router();
+const XlrOtpRouter = express_1.default.Router();
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const APP_ID = process.env.APP_ID;
@@ -27,33 +26,32 @@ if (!CLIENT_ID || !CLIENT_SECRET || !APP_ID || !JWT_SECRET) {
     throw new Error('CLIENT_ID, CLIENT_SECRET, APP_ID, or JWT_SECRET is not defined in environment variables');
 }
 // Generate and send OTP
-OTPRouter.post('/send-otp', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+XlrOtpRouter.post('/send-otp', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d;
     const { phone } = req.body;
     if (!phone) {
         return res.status(400).json({ error: 'Phone number is required' });
     }
     // Sanitize and validate the phone number
-    const sanitizedPhone = phone.replace(/\D/g, ''); // Remove non-digit characters
-    if (sanitizedPhone.length < 10 || sanitizedPhone.length > 15) {
-        return res.status(400).json({ error: 'Invalid phone number format' });
+    const sanitizedPhone = phone.replace(/\D/g, '');
+    if (sanitizedPhone.length !== 10) {
+        return res.status(400).json({ error: 'Phone number must be exactly 10 digits' });
     }
     // Check if the user exists
-    // const existingUser = await User.findOne({
-    //   where: {
-    //     phone: sanitizedPhone,
-    //     active: true, // Use a boolean value directly, not a string.
-    //   },
-    // });
-    // if (!existingUser) {
-    //   return res.status(404).json({ error: 'User is inactive' });
-    // }
+    const existingUser = yield xlrUser_1.default.findOne({
+        where: {
+            phone: sanitizedPhone
+        },
+    });
+    if (!existingUser) {
+        return res.status(404).json({ error: 'User is inactive' });
+    }
     try {
         // Send OTP via external service
         const response = yield axios_1.default.post('https://auth.otpless.app/auth/otp/v1/send', {
             phoneNumber: `91${sanitizedPhone}`, // Prefix with country code
             otpLength: 4,
-            channel: 'SMS',
+            channel: 'WHATSAPP',
             expiry: 600, // OTP expires in 10 minutes
         }, {
             headers: {
@@ -78,7 +76,7 @@ OTPRouter.post('/send-otp', (req, res) => __awaiter(void 0, void 0, void 0, func
         });
     }
 }));
-OTPRouter.post('/verify-otp', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+XlrOtpRouter.post('/verify-otp', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d;
     const { phone, otp, orderId } = req.body;
     if (!phone || !otp || !orderId) {
@@ -91,31 +89,20 @@ OTPRouter.post('/verify-otp', (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
     try {
         const response = yield axios_1.default.post('https://auth.otpless.app/auth/otp/v1/verify', {
-            phoneNumber: 91 + sanitizedPhone,
+            phoneNumber: `91${sanitizedPhone}`,
             otp,
             orderId
         }, {
             headers: {
                 'Content-Type': 'application/json',
-                'clientId': CLIENT_ID,
-                'clientSecret': CLIENT_SECRET,
-                'appId': APP_ID
+                clientId: CLIENT_ID,
+                clientSecret: CLIENT_SECRET,
+                appId: APP_ID
             }
         });
         console.log('OTP verify response:', response.data);
         if (response.data.isOTPVerified) {
-            // Fetch user by phone number
-            const user = yield users_1.default.findOne({ where: { phone: sanitizedPhone } });
-            if (user) {
-                // Generate JWT token
-                const token = jsonwebtoken_1.default.sign({ id: user.id, phone: sanitizedPhone, name: user.username }, // Include user ID in payload
-                JWT_SECRET, { expiresIn: '7d' });
-                console.log('JWT Token:', token, phone); // Log the token
-                res.json({ message: 'OTP Verified Successfully!', token });
-            }
-            else {
-                res.status(404).json({ error: 'User not found' });
-            }
+            res.json({ message: 'OTP Verified Successfully!' });
         }
         else {
             res.status(400).json({ error: 'Invalid OTP or phone number' });
@@ -128,4 +115,4 @@ OTPRouter.post('/verify-otp', (req, res) => __awaiter(void 0, void 0, void 0, fu
         });
     }
 }));
-exports.default = OTPRouter;
+exports.default = XlrOtpRouter;

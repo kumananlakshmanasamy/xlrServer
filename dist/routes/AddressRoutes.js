@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const Address_1 = __importDefault(require("../db/models/Address"));
+const redis_1 = __importDefault(require("../../src/redis/redis"));
 const AddressRouter = express_1.default.Router();
 AddressRouter.post('/create', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -79,12 +80,28 @@ AddressRouter.get('/user/:user_id', (req, res) => __awaiter(void 0, void 0, void
         if (isNaN(userId)) {
             return res.status(400).send({ message: 'Invalid user ID.' });
         }
-        // Find addresses by user_id
-        const addresses = yield Address_1.default.findAll({ where: { user_id: userId } });
-        if (addresses.length === 0) {
-            return res.status(404).send({ message: 'No addresses found for this user.' });
-        }
-        return res.status(200).send({ addresses });
+        // Check if the addresses for the user are already in Redis
+        redis_1.default.get(`addresses:${userId}`, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).send({ message: 'Internal server error.' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).send({ addresses: JSON.parse(cachedData) });
+            }
+            // If data is not in Redis, fetch from the database
+            const addresses = yield Address_1.default.findAll({ where: { user_id: userId } });
+            if (addresses.length === 0) {
+                return res.status(404).send({ message: 'No addresses found for this user.' });
+            }
+            // Store the addresses in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(`addresses:${userId}`, JSON.stringify(addresses));
+            yield redis_1.default.expire(`addresses:${userId}`, 2);
+            // Respond with the addresses
+            res.status(200).send({ addresses });
+        }));
     }
     catch (error) {
         console.error('Error retrieving addresses by user_id:', error);
@@ -123,12 +140,28 @@ AddressRouter.patch('/update/:user_id', (req, res) => __awaiter(void 0, void 0, 
 AddressRouter.get('/details/:address_id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { address_id } = req.params;
-        // Find address by ID
-        const address = yield Address_1.default.findByPk(address_id);
-        if (!address) {
-            return res.status(404).send({ message: 'Address not found.' });
-        }
-        return res.status(200).send({ address });
+        // Check if the address details are already in Redis
+        redis_1.default.get(`addressDetails:${address_id}`, (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).send({ message: 'Internal server error.' });
+            }
+            if (cachedData) {
+                // If data is found in Redis, return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).send({ address: JSON.parse(cachedData) });
+            }
+            // If data is not in Redis, fetch from the database
+            const address = yield Address_1.default.findByPk(address_id);
+            if (!address) {
+                return res.status(404).send({ message: 'Address not found.' });
+            }
+            // Store the address details in Redis with an expiration time of 2 seconds
+            yield redis_1.default.set(`addressDetails:${address_id}`, JSON.stringify(address));
+            yield redis_1.default.expire(`addressDetails:${address_id}`, 2);
+            // Respond with the address details
+            res.status(200).send({ address });
+        }));
     }
     catch (error) {
         console.error('Error retrieving address details:', error);
@@ -153,12 +186,28 @@ AddressRouter.delete('/delete/:address_id', (req, res) => __awaiter(void 0, void
 }));
 AddressRouter.get('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // Retrieve all addresses
-        const addresses = yield Address_1.default.findAll();
-        if (addresses.length === 0) {
-            return res.status(404).send({ message: 'No addresses found.' });
-        }
-        return res.status(200).send({ addresses });
+        // Check if all addresses are already cached in Redis
+        redis_1.default.get('allAddresses', (err, cachedData) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error('Redis error:', err);
+                return res.status(500).send({ message: 'Internal server error.' });
+            }
+            if (cachedData) {
+                // If the data is found in Redis, parse it and return it
+                console.log('Cache hit, returning data from Redis');
+                return res.status(200).json({ addresses: JSON.parse(cachedData) });
+            }
+            // If data is not found in Redis, fetch it from the database
+            const addresses = yield Address_1.default.findAll();
+            if (addresses.length === 0) {
+                return res.status(404).send({ message: 'No addresses found.' });
+            }
+            // Cache all addresses in Redis with a 2 seconds expiration
+            yield redis_1.default.set('allAddresses', JSON.stringify(addresses));
+            yield redis_1.default.expire('allAddresses', 2);
+            // Respond with the addresses
+            return res.status(200).json({ addresses });
+        }));
     }
     catch (error) {
         console.error('Error retrieving addresses:', error);

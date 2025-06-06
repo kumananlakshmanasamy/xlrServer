@@ -3,23 +3,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// models/receiverDetails.ts
+// models/senderDetails.ts
 const sequelize_1 = require("sequelize");
 const config_1 = __importDefault(require("../config"));
-const users_1 = __importDefault(require("./users")); // Import the User model
-class ReceiverDetails extends sequelize_1.Model {
+const users_1 = __importDefault(require("./users")); // Import the User model for reference
+class SenderDetails extends sequelize_1.Model {
 }
-ReceiverDetails.init({
-    receiver_id: {
+SenderDetails.init({
+    sender_id: {
         type: sequelize_1.DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true
     },
-    receiver_name: {
+    sender_name: {
         type: sequelize_1.DataTypes.STRING(100),
         allowNull: false
     },
-    receiver_phone_number: {
+    mobile_number: {
         type: sequelize_1.DataTypes.STRING(20),
         allowNull: false
     },
@@ -27,35 +27,35 @@ ReceiverDetails.init({
         type: sequelize_1.DataTypes.INTEGER,
         allowNull: false,
         references: {
-            model: users_1.default, // Name of the target model
-            key: 'id' // Key in the target model that the foreign key refers to
+            model: users_1.default, // Reference to User model
+            key: 'id'
         },
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
     },
     address: {
-        type: sequelize_1.DataTypes.STRING(255), // Address field
+        type: sequelize_1.DataTypes.STRING(255),
         allowNull: false
     },
     address_type: {
-        type: sequelize_1.DataTypes.ENUM('Home', 'Shop', 'Other'), // Enum for Home, Shop, Other
+        type: sequelize_1.DataTypes.ENUM('Home', 'Shop', 'Other'),
         allowNull: false
     }
 }, {
     timestamps: true,
     sequelize: config_1.default,
-    tableName: 'receiver_details',
+    tableName: 'sender_details',
     indexes: [
         {
             unique: true,
-            name: 'receiverId_index',
-            fields: ['receiver_id']
+            name: 'senderId_index',
+            fields: ['sender_id']
         }
     ]
 });
-// Set up the association
-// ReceiverDetails.belongsTo(User, {
+// Set up the association if needed
+// SenderDetails.belongsTo(User, {
 //     foreignKey: 'user_id',
 //     as: 'user'
 // });
-exports.default = ReceiverDetails;
+exports.default = SenderDetails;
