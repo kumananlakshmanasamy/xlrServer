@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import Vehicle, { VehicleInput } from '../db/models/Vehicles'; // Ensure you import VehicleInput
 import Image from '../db/models/image';
-import redisClient from '../../src/redis/redis'; // Ensure the path is correct
+import redisClient from '../redis/redis';; // Ensure the path is correct
 
 const VehicleRouter = express.Router();
 

@@ -1,7 +1,7 @@
 
 import express, { Request, Response } from 'express';
 import Address from '../db/models/Address'; 
-import redisClient from '../../src/redis/redis'
+import redisClient from '../redis/redis';
 
 const AddressRouter = express.Router();
 

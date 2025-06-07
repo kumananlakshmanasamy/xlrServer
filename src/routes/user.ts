@@ -3,7 +3,7 @@ import User from "../db/models/users";
 import multer from "multer";
 import multerS3 from "multer-s3";
 import { S3Client } from "@aws-sdk/client-s3";
-import redisClient from '../../src/redis/redis'
+import redisClient from '../redis/redis';
 
 const UserRouter = express.Router();
 // Configure AWS S3

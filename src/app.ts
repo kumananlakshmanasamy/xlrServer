@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
-import dbInit from './db/init';
+import dbInit from './db/models';
 import routes from './routes';
 import { initializeSocket,socketHandlers } from './socket/socket';
 

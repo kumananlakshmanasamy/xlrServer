@@ -3,7 +3,7 @@ import XlrUser from '../db/models/xlrUser';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-import redisClient from '../../src/redis/redis'; // adjust path if needed
+import redisClient from '../redis/redis';; // adjust path if needed
 
 dotenv.config();
 

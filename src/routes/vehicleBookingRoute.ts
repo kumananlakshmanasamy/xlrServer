@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import vehicleBooking from '../db/models/vehicleBooking';
-import redisClient from '../../src/redis/redis'; // Assuming redisClient is used for caching
+import redisClient from '../redis/redis';; // Assuming redisClient is used for caching
 
 const vehicleBookingRouter = express.Router();
 

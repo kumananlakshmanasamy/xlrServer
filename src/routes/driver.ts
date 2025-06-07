@@ -1,7 +1,7 @@
 import express, { Request, Response } from "express";
 import Driver from "../db/models/driver";
 import { clusterPoints, rawDataPoints } from "../services/greedy_cluster";
-import redisClient from '../../src/redis/redis';
+import redisClient from '../redis/redis';
 
 const DriverRouter = express.Router();
 

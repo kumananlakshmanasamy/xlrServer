@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import ReceiverDetails from '../db/models/recieverdetails';
-import redisClient from '../../src/redis/redis';
+import redisClient from '../redis/redis';;
 
 const ReceiverDetailsRouter = express.Router();
 

@@ -1,5 +1,4 @@
-import  Driver  from '../db/models/driver';
-
+import Driver from "../db/models/driver";
 
 // Fetch all available drivers (drivers who are not deleted and are active)
 export const getAvailableDrivers = async () => {
