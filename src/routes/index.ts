@@ -17,6 +17,7 @@ import vehicleBookingRouter from "./vehicleBookingRoute";
 import XlrUserRouter from "./xlrUserRoute";
 import XlrOtpRouter from "./xlrOtpRoute";
 import routerAgent from "./Agent";
+import passangerroutes from "./passanger";
 const routes = Router();
 
 routes.use('/driver', DriverRouter)
@@ -36,5 +37,5 @@ routes.use('/vehicle-booking',vehicleBookingRouter)
 routes.use('/xlruser',XlrUserRouter )
 routes.use('/xlrUserOtp',XlrOtpRouter)
 routes.use('/agent',routerAgent)
-
+routes.use('/passenger',passangerroutes)
 export default routes;

@@ -13,6 +13,7 @@ import SenderDetails from './models/sender_details';
 import vehicleBooking from './models/vehicleBooking';
 import XlrUser from './models/xlrUser';
 import Agent from './models/agent';
+import Passenger from './models/passanger';
 async function init() {
 
     const isDev = false
@@ -29,6 +30,7 @@ async function init() {
     await XlrUser.sync({alter:isDev})
     await vehicleBooking.sync({alter: true});
     await Agent.sync({alter: true});
+    await Passenger.sync({alter: true});
 }
 
 const dbInit = () => {
