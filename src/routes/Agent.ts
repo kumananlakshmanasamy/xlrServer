@@ -5,10 +5,10 @@ const routerAgent = express.Router();
 
 routerAgent.post('/', async (req: Request, res: Response) => {
   try {
-    const { user_id, company_name, company_number, company_address } = req.body;
+    const { user_id, company_name, company_number, company_address, user_name } = req.body;
 
     // Basic field validation
-    if (!user_id || !company_name || !company_number || !company_address) {
+    if (!user_id || !company_name || !company_number || !company_address|| !user_name) {
       return res.status(400).json({
         success: false,
         error: 'All fields (user_id, company_name, company_number, company_address) are required.'
@@ -21,7 +21,8 @@ routerAgent.post('/', async (req: Request, res: Response) => {
       company_number,
       company_address,
       commission_earned: 0,
-      total_referrals_done: 0
+      total_referrals_done: 0,
+      user_name
     });
 
     res.status(201).json({ success: true, data: agent });

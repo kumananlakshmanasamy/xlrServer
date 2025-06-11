@@ -11,6 +11,7 @@ interface AgentAttributes {
   total_referrals_done: number;
   createdAt?: Date;
   updatedAt?: Date;
+  user_name:string;
 }
 
 export interface AgentInput extends Optional<AgentAttributes, 'id'> {}
@@ -24,6 +25,7 @@ class Agent extends Model<AgentAttributes, AgentInput> implements AgentAttribute
   public company_address!: string;
   public commission_earned!: number;
   public total_referrals_done!: number;
+  public user_name :string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -33,6 +35,10 @@ Agent.init({
     type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true
+  },
+  user_name:{
+    type: DataTypes.STRING(100),
+    allowNull: false
   },
   user_id: {
     type: DataTypes.INTEGER,
