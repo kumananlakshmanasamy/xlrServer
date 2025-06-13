@@ -1,116 +1,61 @@
 import express, { Request, Response } from 'express';
 import Driver from '../db/models/driver';
-import axios from 'axios';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
-import { where } from 'sequelize';
-
+import twilio from 'twilio';
 
 dotenv.config();
+
 const DriverOTPRouter = express.Router();
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const APP_ID = process.env.APP_ID;
-const JWT_SECRET = process.env.JWT_SECRET;
+const {
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  TWILIO_VERIFY_SERVICE_SID,
+  JWT_SECRET
+} = process.env;
 
-
-if (!CLIENT_ID || !CLIENT_SECRET || !APP_ID || !JWT_SECRET) {
-  throw new Error('CLIENT_ID, CLIENT_SECRET, APP_ID, or JWT_SECRET is not defined in environment variables');
+if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_VERIFY_SERVICE_SID || !JWT_SECRET) {
+  throw new Error('Twilio or JWT environment variables are missing');
 }
 
-// Temporary storage for demonstration purposes
+const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+
+// ✅ Send OTP
 DriverOTPRouter.post('/send-otp', async (req: Request, res: Response) => {
   try {
     const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
-    // Validate phone number
-    if (!phone) {
-      return res.status(400).json({ error: 'Phone number is required' });
-    }
-
-    const sanitizedPhone = phone.replace(/\D/g, ''); // Remove non-digit characters
+    const sanitizedPhone = phone.replace(/\D/g, '');
     if (sanitizedPhone.length < 10 || sanitizedPhone.length > 15) {
       return res.status(400).json({ error: 'Invalid phone number format' });
     }
 
-    // Check if the driver exists in the database
     const driver = await Driver.findOne({ where: { phone: sanitizedPhone } });
 
-    if (!driver) {
-      // If the driver does not exist, it means a new driver, send OTP
-      const otpResponse = await axios.post(
-        'https://auth.otpless.app/auth/otp/v1/send',
-        {
-          phoneNumber: `91${sanitizedPhone}`,
-          otpLength: 4,
-          channel: 'SMS',
-          expiry: 600, // OTP expiry in seconds (10 minutes)
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            clientId: CLIENT_ID,
-            clientSecret: CLIENT_SECRET,
-            appId: APP_ID,
-          },
-        }
-      );
-
-      console.log('OTP send response:', otpResponse.data);
-
-      if (otpResponse.data.orderId) {
-        return res.json({ message: 'OTP sent successfully', orderId: otpResponse.data.orderId });
-      } else {
-        throw new Error(`OTP service error: ${otpResponse.data.message || 'Unknown error'}`);
-      }
-    }
-
-    // If the driver exists, check their status
-    if (!driver.active) {
+    if (driver && !driver.active) {
       return res.status(403).json({ error: 'Driver is inactive.' });
     }
-    // Send OTP via external service
-    const otpResponse = await axios.post(
-      'https://auth.otpless.app/auth/otp/v1/send',
-      {
-        phoneNumber: `91${sanitizedPhone}`, // Prefix with country code
-        otpLength: 4,
-        channel: 'SMS',
-        expiry: 600, // OTP expiry in seconds (10 minutes)
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          clientId: CLIENT_ID,
-          clientSecret: CLIENT_SECRET,
-          appId: APP_ID,
-        },
-      }
-    );
 
-    console.log('OTP send response:', otpResponse.data);
+    const sendOTP = await twilioClient.verify.v2.services(TWILIO_VERIFY_SERVICE_SID)
+      .verifications.create({
+        to: `+91${sanitizedPhone}`,
+        channel: 'sms' // or 'whatsapp' if enabled
+      });
 
-    if (otpResponse.data.orderId) {
-      // Optionally save orderId to DB for future reference
-      res.json({ message: 'OTP sent successfully', orderId: otpResponse.data.orderId });
-    } else {
-      throw new Error(`OTP service error: ${otpResponse.data.message || 'Unknown error'}`);
-    }
+    console.log('OTP send status:', sendOTP.status);
+    res.json({ message: 'OTP sent successfully', orderId: sendOTP.sid });
   } catch (error: any) {
-    console.error('Error sending OTP:', error.response?.data || error.message);
-    res.status(error.response?.status || 500).json({
-      error: `Failed to send OTP: ${error.response?.data?.message || error.message}`,
-    });
+    console.error('Error sending OTP:', error.message);
+    res.status(500).json({ error: `Failed to send OTP: ${error.message}` });
   }
 });
 
+// ✅ Verify OTP
 DriverOTPRouter.post('/verify-otp', async (req: Request, res: Response) => {
-  const { phone, otp, orderId } = req.body;
-
-  if (!phone || !otp || !orderId) {
-    return res.status(400).json({ error: 'Phone number, OTP, and orderId are required' });
-  }
+  const { phone, otp } = req.body;
+  if (!phone || !otp) return res.status(400).json({ error: 'Phone number and OTP are required' });
 
   const sanitizedPhone = phone.replace(/\D/g, '');
   if (sanitizedPhone.length < 10 || sanitizedPhone.length > 15) {
@@ -118,20 +63,13 @@ DriverOTPRouter.post('/verify-otp', async (req: Request, res: Response) => {
   }
 
   try {
-    const response = await axios.post('https://auth.otpless.app/auth/otp/v1/verify', {
-      phoneNumber: `91${sanitizedPhone}`,
-      otp,
-      orderId,
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
-        appId: APP_ID,
-      }
-    });
+    const verifyResponse = await twilioClient.verify.v2.services(TWILIO_VERIFY_SERVICE_SID)
+      .verificationChecks.create({
+        to: `+91${sanitizedPhone}`,
+        code: otp,
+      });
 
-    if (response.data.isOTPVerified) {
+    if (verifyResponse.status === 'approved') {
       const driver = await Driver.findOne({ where: { phone: sanitizedPhone } });
 
       if (driver) {
@@ -141,7 +79,6 @@ DriverOTPRouter.post('/verify-otp', async (req: Request, res: Response) => {
           document_status: driver.document_status,
         };
 
-        // Check document status
         switch (driver.document_status) {
           case 'pending':
             return res.status(200).json({
@@ -161,7 +98,6 @@ DriverOTPRouter.post('/verify-otp', async (req: Request, res: Response) => {
               JWT_SECRET,
               { expiresIn: '12h' }
             );
-            console.log('JWT Token:', token);
             return res.json({
               message: 'OTP Verified Successfully!',
               token,
@@ -175,26 +111,24 @@ DriverOTPRouter.post('/verify-otp', async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Driver not found' });
       }
     } else {
-      return res.status(400).json({ error: 'Invalid OTP or phone number' });
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
   } catch (error: any) {
-    console.error('Error verifying OTP:', error.response?.data || error.message);
-    res.status(error.response?.status || 500).json({
-      error: `Failed to verify OTP: ${error.response?.data?.message || error.message}`,
-    });
+    console.error('Error verifying OTP:', error.message);
+    res.status(500).json({ error: `Failed to verify OTP: ${error.message}` });
   }
 });
 
-
+// ✅ Check driver (unchanged)
 DriverOTPRouter.get('/check-driver', async (req: Request, res: Response) => {
-  const phone = req.query.phone as string; // Ensure phoneNumber is treated as a string
+  const phone = req.query.phone as string;
 
   if (!phone) {
     return res.status(400).json({ error: 'Phone number is required' });
   }
 
   try {
-    const driver = await Driver.findOne({ where: { phone: phone, is_deleted: false } });
+    const driver = await Driver.findOne({ where: { phone, is_deleted: false } });
 
     if (!driver) {
       return res.status(404).json({ error: 'Driver not found or inactive' });
